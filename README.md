@@ -12,6 +12,10 @@ Requirements
 ------------
 
  * pyscard
+
+Potential requirements
+----------------------
+
  * swig
 
 Notes
