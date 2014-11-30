@@ -18,9 +18,10 @@ import sys
 import struct
 
 # smartcard module
+from exc import PINModeLockedException, NoKeyLoadedException
 from smartcard.System import readers
-from smartcard.Exceptions import (CardConnectionException,
-    NoCardException, SmartcardException)
+# from smartcard.Exceptions import (CardConnectionException,
+#    NoCardException, SmartcardException)
 
 
 READER_PATTERN = re.compile('.*Yubikey NEO.*', re.I)
@@ -79,15 +80,9 @@ def open_key(name=None):
     raise Exception('No smartcard reader found matching: %s' % r.pattern)
 
 
-
-
-#
-# same as open keys but will try to look for the Yubico Authenticator applet on all readers (slower then open_key)
-#
 def open_key_multiple_readers(name=None):
     """
-    Opens a smartcard reader matching the given name and connects to the
-    ykneo-oath applet through it.
+    Attempts to open the Yubico Authenticator applet on all known readers
 
     Returns a reference to the YkneoYubiOath object.
     """
@@ -98,9 +93,9 @@ def open_key_multiple_readers(name=None):
             conn = reader.createConnection()
             conn.connect()
 
-            data, status = _cmd2(conn, 0, 0xa4, 0x04, 0x00, 'a0000005272101'.decode('hex'))
+            data, status = _cmd2(conn, 0, 0xa4, 0x04, 0x00,
+                                 'a0000005272101'.decode('hex'))
 
-            
             if (status) != 0x9000:
                 print "unable to select the applet on reader %s" % reader
             else:
@@ -111,9 +106,7 @@ def open_key_multiple_readers(name=None):
             print "WARNING: %s" % e
             print "i am in the except of multiple readers"
 
-
     raise Exception('No smartcard reader found with YubiOath applet')
-
 
 
 def _cmd2(conn, cl, ins, p1, p2, data=''):
@@ -127,7 +120,6 @@ def _cmd2(conn, cl, ins, p1, p2, data=''):
         sys.exit(1)
 
     return data, sw1 << 8 | sw2
-
 
 
 class YkneoYubiOath(object):
@@ -150,9 +142,9 @@ class YkneoYubiOath(object):
 
     def __init__(self, reader):
         self.reader = reader
-        #is the neo protected?
+        # is the neo protected?
         self.password_protected = False
-        #store the password
+        # store the password
         self.password = None
         self._user_unlocked = False
         self._admin_unlocked = False
@@ -163,74 +155,66 @@ class YkneoYubiOath(object):
             raise Exception('Unable to select the applet')
 
         self._version = tuple(data[2:5])
-        #print self._version
-        
+        # print self._version
+
         self._key_loaded = data[3] == 1
 
-        #initialize the ID
+        # initialize the ID
         self.install_id = data[7:15]
-        #initialize the CHALLENGE
-        self.challenge = data[17:] 
+        # initialize the CHALLENGE
+        self.challenge = data[17:]
 
-        #set password status
+        # set password status
         self.set_password_status(data)
-        #check version validity
+        # check version validity
         self.check_version_length(data)
 
-
-
-    #initialize the NEO password status
+    # initialize the NEO password status
     def set_password_status(self, data):
-        
+
         for x in data:
             if x == 116:
                 self.password_protected = True
                 break
         else:
-            #there is a password set
+            # there is a password set
             self.password_protected = False
 
-    #return the NEO password status
+    # return the NEO password status
     def is_protected(self):
         return self.password_protected
 
-
-    #check if the version is 3 bytes else something is wrong
+    # check if the version is 3 bytes else something is wrong
     def check_version_length(self, data):
-        if not data[1] == 3: 
+        if not data[1] == 3:
             raise Exception('Wrong applet version length')
 
-
-
-    #@property
+    # @property
     def user_unlocked(self):
         return self._user_unlocked
 
-    #@property
+    # @property
     def admin_unlocked(self):
         return self._admin_unlocked
 
-    #@property
+    # @property
     def version(self):
         return "%d.%d.%d" % self._version
 
-    #@property
+    # @property
     def key_loaded(self):
         return self._key_loaded
-
-
-
 
     def _cmd(self, cl, ins, p1, p2, data=''):
         command = '%02x%02x%02x%02x%02x%s' % (cl, ins, p1, p2, len(data),
                                               data.encode('hex'))
-        
+
         # print "DEBUG INSIDE COMMAND:"
         # print "len(data)"
         # print len(data)
         # print "DATA:"
         # print data
-        
+
         # print "command decode hex"
         # print command.decode('hex')
         # #print ord(command[0])
@@ -238,7 +222,7 @@ class YkneoYubiOath(object):
         # test = []
         # for x in command:
         #     test.append(ord(x))
-        
+
         # print "ARRAY VALORY"
         # print "ord di X"
         # print test
@@ -247,13 +231,12 @@ class YkneoYubiOath(object):
 
         return data, sw1 << 8 | sw2
 
-
     def _cmd_ok(self, *args, **kwargs):
 
         data, status = self._cmd(*args, **kwargs)
-        #get high bits
-        low = status & 0xFF;
-        high = status >> 8;
+        # get high bits
+        # low = status & 0xFF
+        high = status >> 8
 
         if status != 0x9000:
             if high != 0x61:
@@ -264,26 +247,6 @@ class YkneoYubiOath(object):
                     data = data + part
 
         return ''.join(map(chr, data))
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 """
